@@ -1,0 +1,11 @@
+app:
+  hosts:
+    app-server:
+
+redis:
+  hosts:
+    app-server:
+
+nginx:
+  hosts:
+    app-server:

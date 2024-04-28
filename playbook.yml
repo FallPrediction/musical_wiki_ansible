@@ -1,0 +1,92 @@
+- name: Initalize App server
+  hosts: app
+  become: true
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+    - name: Install unzip
+      ansible.builtin.apt:
+        name: unzip
+    - name: Install jq
+      ansible.builtin.apt:
+        name: jq
+    - name: Download AWS CLI
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+    - name: Unzip AWS CLI
+      ansible.builtin.unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: yes
+    - name: Install AWS CLI
+      ansible.builtin.command: sudo /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
+
+- name: Initalize Redis server
+  hosts: redis
+  become: true
+  vars_prompt:
+    - name: password_after_sha256
+      prompt: Enter the Redis user password after sha256
+      private: true
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+    - name: Install Redis
+      ansible.builtin.apt:
+        name: redis-server
+    - name: Configure Redis
+      ansible.builtin.lineinfile:
+        dest: /etc/redis/redis.conf
+        regexp: '^bind\s*='
+        line: "#"
+    - name: Configure Redis
+      ansible.builtin.lineinfile:
+        dest: /etc/redis/redis.conf
+        regexp: '^protected-mode yes'
+        line: "protected-mode no"
+    - name: Configure Redis password
+      ansible.builtin.template:
+        src: template/redis/users.acl.j2
+        dest: /etc/redis/users.acl
+        mode: '0644'
+    - name: Configure Redis acl
+      ansible.builtin.lineinfile:
+        dest: /etc/redis/redis.conf
+        regexp: '^# aclfile\s*'
+        line: "aclfile /etc/redis/users.acl"
+
+  handlers:
+   - name: Restart Redis
+     ansible.builtin.service:
+       name: redis-server
+       state: restarted
+
+- name: Initalize Nginx server
+  hosts: nginx
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+    - name: Install Nginx
+      ansible.builtin.apt:
+        name: nginx
+    - name: Configure Nginx
+      ansible.builtin.template:
+        src: template/nginx/musical_wiki.conf.j2
+        dest: /etc/nginx/sites-available/musical_wiki.conf
+        mode: '0644'
+    - name: Link file
+      ansible.builtin.command: ln -sf /etc/nginx/sites-available/musical_wiki.conf /etc/nginx/sites-enabled/musical_wiki.conf
+    - name: Remove default site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+    - name: Restart Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
